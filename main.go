@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -18,17 +19,19 @@ type config struct {
 	mu                 *sync.Mutex
 	concurrencyControl chan struct{}
 	wg                 *sync.WaitGroup
+	maxPages           int
 }
 
 func main() {
 	// Check for proper cli arguments
-	if len(os.Args) < 2 {
-		fmt.Println("no website provided")
+	if len(os.Args) < 4 {
+		fmt.Println("Usage: ./crawler URL maxConcurrency maxPages")
 		os.Exit(1)
 	}
 
-	if len(os.Args) > 2 {
+	if len(os.Args) > 4 {
 		fmt.Println("too many arguments provided")
+		fmt.Println("Usage: ./crawler URL maxConcurrency maxPages")
 		os.Exit(1)
 	}
 
@@ -38,13 +41,25 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	maxGoRoutines, err := strconv.ParseInt(os.Args[2], 10, 64)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	maxPages, err := strconv.ParseInt(os.Args[3], 10, 64)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	// Create initial config
 	cfg := &config{
 		pages:              make(map[string]int),
 		baseURL:            baseURL,
-		concurrencyControl: make(chan struct{}, 10),
+		concurrencyControl: make(chan struct{}, maxGoRoutines),
 		mu:                 &sync.Mutex{},
 		wg:                 &sync.WaitGroup{},
+		maxPages:           int(maxPages),
 	}
 
 	cfg.wg.Add(1) // Add for the initial goroutine
@@ -88,6 +103,16 @@ func (cfg *config) crawlPage(rawCurrentURL string) {
 		cfg.wg.Done()            // signal waitgroup
 		<-cfg.concurrencyControl // release the spot for another goroutine
 	}()
+
+	// Return if length of pages > maxPages
+	cfg.mu.Lock()
+	if len(cfg.pages) > cfg.maxPages {
+		cfg.mu.Unlock()
+		return
+	}
+	cfg.mu.Unlock()
+
+	fmt.Printf("\r\nCrawling page: %s\r\n", rawCurrentURL)
 
 	// Check if rawCurrentURL has the same domain as rawBaseURL check
 	baseWithoutPrefix := strings.TrimPrefix(cfg.baseURL.String(), "https://")
