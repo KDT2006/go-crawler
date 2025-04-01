@@ -3,10 +3,22 @@ package main
 import (
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
+	"sync"
+	"time"
 )
+
+type config struct {
+	pages              map[string]int
+	baseURL            *url.URL
+	mu                 *sync.Mutex
+	concurrencyControl chan struct{}
+	wg                 *sync.WaitGroup
+}
 
 func main() {
 	// Check for proper cli arguments
@@ -22,10 +34,28 @@ func main() {
 
 	fmt.Printf("starting crawl of: %s\n", os.Args[1])
 
-	pages := make(map[string]int) // map for storing link counts
-	crawlPage(os.Args[1], os.Args[1], pages)
+	baseURL, err := url.Parse(os.Args[1])
+	if err != nil {
+		log.Fatal(err)
+	}
+	// Create initial config
+	cfg := &config{
+		pages:              make(map[string]int),
+		baseURL:            baseURL,
+		concurrencyControl: make(chan struct{}, 10),
+		mu:                 &sync.Mutex{},
+		wg:                 &sync.WaitGroup{},
+	}
 
-	fmt.Println(pages)
+	cfg.wg.Add(1) // Add for the initial goroutine
+	go cfg.crawlPage(os.Args[1])
+
+	// Wait for the first goroutine to start
+	time.Sleep(time.Millisecond * 10)
+
+	cfg.wg.Wait()
+
+	fmt.Println(cfg.pages)
 }
 
 func getHTML(raw_url string) (string, error) {
@@ -53,9 +83,14 @@ func getHTML(raw_url string) (string, error) {
 	return string(htmlData), nil
 }
 
-func crawlPage(rawBaseURL, rawCurrentURL string, pages map[string]int) {
+func (cfg *config) crawlPage(rawCurrentURL string) {
+	defer func() {
+		cfg.wg.Done()            // signal waitgroup
+		<-cfg.concurrencyControl // release the spot for another goroutine
+	}()
+
 	// Check if rawCurrentURL has the same domain as rawBaseURL check
-	baseWithoutPrefix := strings.TrimPrefix(rawBaseURL, "https://")
+	baseWithoutPrefix := strings.TrimPrefix(cfg.baseURL.String(), "https://")
 	baseDomain := strings.Split(baseWithoutPrefix, "/")[0]
 
 	currentWithoutPrefix := strings.TrimPrefix(rawCurrentURL, "https://")
@@ -75,11 +110,9 @@ func crawlPage(rawBaseURL, rawCurrentURL string, pages map[string]int) {
 	}
 
 	// Check if already crawled
-	if _, ok := pages[normalizedCurrent]; ok {
-		pages[normalizedCurrent] += 1
+	if first := cfg.addPageVisit(normalizedCurrent); !first {
+		fmt.Printf("already crawled %s\r\n", normalizedCurrent)
 		return
-	} else {
-		pages[normalizedCurrent] = 1
 	}
 
 	htmlData, err := getHTML(rawCurrentURL)
@@ -89,13 +122,30 @@ func crawlPage(rawBaseURL, rawCurrentURL string, pages map[string]int) {
 	}
 	fmt.Printf("HTML data for %s:\r\n%s\r\n", rawCurrentURL, htmlData)
 
-	urls, err := getURLsFromHTML(htmlData, rawBaseURL)
+	urls, err := getURLsFromHTML(htmlData, cfg.baseURL.String())
 	if err != nil {
 		fmt.Println("error getURLsFromHTML() failed:", err)
 		return
 	}
 
 	for _, url := range urls {
-		crawlPage(rawBaseURL, url, pages)
+		cfg.wg.Add(1) // add to waitgroup
+		go func(urlToCrawl string) {
+			cfg.concurrencyControl <- struct{}{} // block new goroutines till there's space
+			cfg.crawlPage(urlToCrawl)
+		}(url)
+	}
+}
+
+func (cfg *config) addPageVisit(normalizedURL string) (isFirst bool) {
+	cfg.mu.Lock()
+	defer cfg.mu.Unlock()
+
+	if _, ok := cfg.pages[normalizedURL]; ok {
+		cfg.pages[normalizedURL] += 1
+		return false
+	} else {
+		cfg.pages[normalizedURL] = 1
+		return true
 	}
 }
