@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/KDT2006/crawler/html"
+	"github.com/KDT2006/crawler/reports"
 )
 
 type config struct {
@@ -21,11 +23,6 @@ type config struct {
 	concurrencyControl chan struct{}
 	wg                 *sync.WaitGroup
 	maxPages           int
-}
-
-type kv struct {
-	Key   string
-	Value int
 }
 
 func main() {
@@ -76,7 +73,7 @@ func main() {
 
 	cfg.wg.Wait()
 
-	printReports(cfg.pages, cfg.baseURL.String())
+	reports.PrintReports(cfg.pages, cfg.baseURL.String())
 }
 
 func getHTML(raw_url string) (string, error) {
@@ -134,7 +131,7 @@ func (cfg *config) crawlPage(rawCurrentURL string) {
 		return
 	}
 
-	normalizedCurrent, err := normalizeURL(rawCurrentURL)
+	normalizedCurrent, err := html.NormalizeURL(rawCurrentURL)
 	if err != nil {
 		fmt.Println("error normalizeURL(rawCurrentURL) failed:", err)
 		return
@@ -153,7 +150,7 @@ func (cfg *config) crawlPage(rawCurrentURL string) {
 	}
 	fmt.Printf("HTML data for %s:\r\n%s\r\n", rawCurrentURL, htmlData)
 
-	urls, err := getURLsFromHTML(htmlData, cfg.baseURL.String())
+	urls, err := html.GetURLsFromHTML(htmlData, cfg.baseURL.String())
 	if err != nil {
 		fmt.Println("error getURLsFromHTML() failed:", err)
 		return
@@ -179,32 +176,4 @@ func (cfg *config) addPageVisit(normalizedURL string) (isFirst bool) {
 		cfg.pages[normalizedURL] = 1
 		return true
 	}
-}
-
-func printReports(pages map[string]int, baseURL string) {
-	header := fmt.Sprintf(`=============================
-  REPORT for %s
-=============================`, baseURL)
-
-	fmt.Printf("\n%s\n\n", header)
-
-	sorted := sortReports(pages)
-	for _, page := range sorted {
-		fmt.Printf("Found %d internal links to %s\n", page.Value, page.Key)
-	}
-}
-
-func sortReports(pages map[string]int) []kv {
-	// Turn the map into a kv slice
-	var pagesSlice []kv
-	for page, count := range pages {
-		pagesSlice = append(pagesSlice, kv{Key: page, Value: count})
-	}
-
-	// Sort the slice
-	sort.SliceStable(pagesSlice, func(i, j int) bool {
-		return pagesSlice[i].Value > pagesSlice[j].Value
-	})
-
-	return pagesSlice
 }

@@ -1,4 +1,4 @@
-package main
+package html
 
 import (
 	"fmt"
@@ -28,7 +28,7 @@ func traverseTree(node *html.Node, URLChan chan<- string) {
 	}
 }
 
-func getURLsFromHTML(htmlBody, rawBaseURL string) ([]string, error) {
+func GetURLsFromHTML(htmlBody, rawBaseURL string) ([]string, error) {
 	reader := strings.NewReader(htmlBody)
 	node, err := html.Parse(reader)
 	if err != nil {

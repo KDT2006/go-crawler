@@ -1,4 +1,4 @@
-package main
+package html
 
 import (
 	"reflect"
@@ -23,7 +23,7 @@ func TestGetURLsFromHTML(t *testing.T) {
 </html>
 `
 	expected := []string{"https://blog.boot.dev/path/one", "https://other.com/path/one"}
-	actual, err := getURLsFromHTML(inputBody, inputURL)
+	actual, err := GetURLsFromHTML(inputBody, inputURL)
 	assert.Nil(t, err)
 	assert.True(t, reflect.DeepEqual(expected, actual))
 
@@ -49,7 +49,7 @@ func TestGetURLsFromHTML(t *testing.T) {
 		"https://other.com/path/one",
 		"https://example.com/auth/user",
 	}
-	actual, err = getURLsFromHTML(inputBody, inputURL)
+	actual, err = GetURLsFromHTML(inputBody, inputURL)
 	assert.Nil(t, err)
 	assert.True(t, reflect.DeepEqual(expected, actual))
 
@@ -70,7 +70,7 @@ func TestGetURLsFromHTML(t *testing.T) {
 	</body>
 </html>
 `
-	actual, err = getURLsFromHTML(inputBody, inputURL)
+	actual, err = GetURLsFromHTML(inputBody, inputURL)
 	assert.Nil(t, err)
 	assert.Equal(t, 0, len(actual))
 
@@ -78,6 +78,6 @@ func TestGetURLsFromHTML(t *testing.T) {
 	inputURL = "https://blog.boot.dev"
 	inputBody = ``
 	expected = []string{}
-	actual, err = getURLsFromHTML(inputBody, inputURL)
+	actual, err = GetURLsFromHTML(inputBody, inputURL)
 	assert.Nil(t, err)
 }

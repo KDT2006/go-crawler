@@ -1,4 +1,4 @@
-package main
+package html
 
 import (
 	"fmt"
@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func normalizeURL(raw string) (string, error) {
+func NormalizeURL(raw string) (string, error) {
 	parsed, err := url.Parse(raw)
 	if err != nil {
 		return "", err
