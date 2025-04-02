@@ -1,7 +1,10 @@
 package reports
 
 import (
+	"encoding/csv"
 	"fmt"
+	"log"
+	"os"
 	"sort"
 )
 
@@ -48,6 +51,57 @@ func PrintReports(pages map[string]*Link, baseURL string) {
 		}
 		fmt.Printf("Found %d %s links to %s\n", page.Value.Count, linkTypeText, page.Key)
 	}
+
+	// Save the report to a csv file
+	saveReports(pages)
+}
+
+func saveReports(pages map[string]*Link) {
+	file, err := os.Create("report.csv")
+	if err != nil {
+		log.Println("error creating file report.csv:", err)
+		return
+	}
+	defer file.Close()
+
+	records := [][]string{}
+
+	// Fill in the headers
+	records = append(records, []string{"link_type", "link", "count"})
+
+	// Populate the records to write: linkType, link, count
+	for page, link := range pages {
+		var linkTypeText string
+		if link.LinkType == 0 {
+			linkTypeText = "internal"
+		} else {
+			linkTypeText = "external"
+		}
+
+		temp := []string{}
+		temp = append(temp, linkTypeText)
+		temp = append(temp, page)
+		temp = append(temp, fmt.Sprintf("%d", link.Count))
+
+		records = append(records, temp)
+	}
+
+	// Print to stdout
+	w := csv.NewWriter(file)
+	for _, record := range records {
+		if err := w.Write(record); err != nil {
+			log.Fatalln("error writing record to csv:", err)
+		}
+	}
+
+	// Flush out any remaining buffer
+	w.Flush()
+
+	if err := w.Error(); err != nil {
+		log.Fatal(err)
+	}
+
+	fmt.Println("Report saved to report.csv!")
 }
 
 func sortReports(pages map[string]*Link) []kv {
