@@ -59,4 +59,6 @@ func GenerateVisual(pages map[string]*Link, baseURL string) {
 		log.Println("error rendering the plot:", err)
 		return
 	}
+
+	fmt.Println("Visual saved to visual.html!")
 }
