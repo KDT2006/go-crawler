@@ -51,12 +51,9 @@ func PrintReports(pages map[string]*Link, baseURL string) {
 		}
 		fmt.Printf("Found %d %s links to %s\n", page.Value.Count, linkTypeText, page.Key)
 	}
-
-	// Save the report to a csv file
-	saveReports(pages)
 }
 
-func saveReports(pages map[string]*Link) {
+func SaveReports(pages map[string]*Link) {
 	file, err := os.Create("report.csv")
 	if err != nil {
 		log.Println("error creating file report.csv:", err)

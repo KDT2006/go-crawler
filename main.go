@@ -71,7 +71,10 @@ func main() {
 
 	cfg.wg.Wait()
 
+	// Print, Save and Visualize the report
 	reports.PrintReports(cfg.pages, cfg.baseURL.String())
+	reports.SaveReports(cfg.pages)
+	reports.GenerateVisual(cfg.pages, cfg.baseURL.String())
 }
 
 func (cfg *config) crawlPage(rawCurrentURL string) {
