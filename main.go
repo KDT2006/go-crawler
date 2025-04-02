@@ -2,9 +2,7 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"net/url"
 	"os"
 	"strconv"
@@ -17,7 +15,7 @@ import (
 )
 
 type config struct {
-	pages              map[string]int
+	pages              map[string]*reports.Link
 	baseURL            *url.URL
 	mu                 *sync.Mutex
 	concurrencyControl chan struct{}
@@ -57,7 +55,7 @@ func main() {
 
 	// Create initial config
 	cfg := &config{
-		pages:              make(map[string]int),
+		pages:              make(map[string]*reports.Link),
 		baseURL:            baseURL,
 		concurrencyControl: make(chan struct{}, maxGoRoutines),
 		mu:                 &sync.Mutex{},
@@ -74,31 +72,6 @@ func main() {
 	cfg.wg.Wait()
 
 	reports.PrintReports(cfg.pages, cfg.baseURL.String())
-}
-
-func getHTML(raw_url string) (string, error) {
-	resp, err := http.Get(raw_url)
-	if err != nil {
-		return "", err
-	}
-
-	// Check for HTTP status error
-	if resp.StatusCode >= 400 {
-		return "", fmt.Errorf("error response code: %d", resp.StatusCode)
-	}
-
-	// Check for proper content type
-	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") {
-		return "", fmt.Errorf("error invalid content type: %s", resp.Header.Get("Content-Type"))
-	}
-	defer resp.Body.Close()
-
-	htmlData, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	return string(htmlData), nil
 }
 
 func (cfg *config) crawlPage(rawCurrentURL string) {
@@ -127,8 +100,12 @@ func (cfg *config) crawlPage(rawCurrentURL string) {
 	fmt.Printf("Base domain: %s\r\n", baseDomain)
 	fmt.Printf("Current domain: %s\r\n", currentDomain)
 
-	if baseDomain != currentDomain {
-		return
+	// Get the type of link
+	var linkType reports.LinkType
+	if baseDomain == currentDomain {
+		linkType = reports.Internal
+	} else {
+		linkType = reports.External
 	}
 
 	normalizedCurrent, err := html.NormalizeURL(rawCurrentURL)
@@ -138,12 +115,17 @@ func (cfg *config) crawlPage(rawCurrentURL string) {
 	}
 
 	// Check if already crawled
-	if first := cfg.addPageVisit(normalizedCurrent); !first {
+	if first := cfg.addPageVisit(normalizedCurrent, linkType); !first {
 		fmt.Printf("already crawled %s\r\n", normalizedCurrent)
 		return
 	}
 
-	htmlData, err := getHTML(rawCurrentURL)
+	// Don't crawl external links
+	if baseDomain != currentDomain {
+		return
+	}
+
+	htmlData, err := html.GetHTML(rawCurrentURL)
 	if err != nil {
 		fmt.Println("error getHTML(rawCurrentURL) failed:", err)
 		return
@@ -165,15 +147,15 @@ func (cfg *config) crawlPage(rawCurrentURL string) {
 	}
 }
 
-func (cfg *config) addPageVisit(normalizedURL string) (isFirst bool) {
+func (cfg *config) addPageVisit(normalizedURL string, linkType reports.LinkType) (isFirst bool) {
 	cfg.mu.Lock()
 	defer cfg.mu.Unlock()
 
 	if _, ok := cfg.pages[normalizedURL]; ok {
-		cfg.pages[normalizedURL] += 1
+		cfg.pages[normalizedURL].Count += 1
 		return false
 	} else {
-		cfg.pages[normalizedURL] = 1
+		cfg.pages[normalizedURL] = reports.NewLink(linkType)
 		return true
 	}
 }

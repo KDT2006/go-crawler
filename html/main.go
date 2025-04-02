@@ -2,6 +2,8 @@ package html
 
 import (
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 
 	"golang.org/x/net/html"
@@ -53,4 +55,29 @@ func GetURLsFromHTML(htmlBody, rawBaseURL string) ([]string, error) {
 	}
 
 	return urls, nil
+}
+
+func GetHTML(raw_url string) (string, error) {
+	resp, err := http.Get(raw_url)
+	if err != nil {
+		return "", err
+	}
+
+	// Check for HTTP status error
+	if resp.StatusCode >= 400 {
+		return "", fmt.Errorf("error response code: %d", resp.StatusCode)
+	}
+
+	// Check for proper content type
+	if !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/html") {
+		return "", fmt.Errorf("error invalid content type: %s", resp.Header.Get("Content-Type"))
+	}
+	defer resp.Body.Close()
+
+	htmlData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	return string(htmlData), nil
 }
